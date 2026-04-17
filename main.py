@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
-from rich.text import Text
+from rich.table import Table
 
 from pet.core.pet import Pet
 from pet.llm import LLMClient
@@ -161,18 +161,68 @@ def show_welcome(pet: Pet):
 
 def show_help():
     """显示帮助"""
-    console.print(Panel(
-        "[bold]Commands[/]\n\n"
-        "/help     - Show help\n"
-        "/status   - Pet status\n"
-        "/config   - Reconfigure API\n"
-        "/reload   - Reload personality\n"
-        "/mood     - Mood details\n"
-        "/clear    - Clear memory\n"
-        "/quit     - Exit",
-        title="Help",
-        border_style="yellow"
-    ))
+    table = Table(title="Commands", show_header=False, box=None)
+    table.add_column("cmd", style="cyan")
+    table.add_column("desc")
+
+    commands = [
+        ("/help", "Show this help"),
+        ("/status", "Show pet status"),
+        ("/mood", "Show mood details"),
+        ("/personality [id]", "Switch personality"),
+        ("/art [id]", "Switch pet appearance"),
+        ("/load <file.md>", "Load personality from md"),
+        ("/import <file.txt>", "Load custom ASCII art"),
+        ("/pet", "Pet the head"),
+        ("/feed", "Feed the pet"),
+        ("/play", "Play with pet"),
+        ("/scold", "Scold the pet"),
+        ("/config", "Reconfigure API"),
+        ("/reload", "Reload personality file"),
+        ("/clear", "Clear memory"),
+        ("/quit", "Exit program"),
+    ]
+
+    for cmd, desc in commands:
+        table.add_row(cmd, desc)
+
+    console.print(table)
+    console.print("\n[dim]Tip: Just type to chat with your pet![/]")
+
+
+def show_personalities(pet: Pet):
+    """显示性格列表"""
+    table = Table(title="Personalities", show_header=True)
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("Description")
+    table.add_column("Current", justify="center")
+
+    for p in pet.personality.list_presets():
+        current = "[green]*[/]" if p["current"] else ""
+        table.add_row(p["id"], p["name"], p["desc"], current)
+
+    console.print(table)
+    console.print("\n[dim]Usage: /personality friendly[/]")
+
+
+def show_arts(pet: Pet):
+    """显示外观列表"""
+    table = Table(title="Appearances", show_header=True)
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("Current", justify="center")
+
+    for art in pet.list_arts():
+        current = "[green]*[/]" if art["current"] else ""
+        table.add_row(art["id"], art["name"], current)
+
+    if pet.custom_art:
+        table.add_row("custom", "Custom", "[green]*[/]")
+
+    console.print(table)
+    console.print("\n[dim]Usage: /art cat[/]")
+    console.print("[dim]       /import my_art.txt[/]")
 
 
 async def run_simple_mode(pet: Pet, config: dict):
@@ -187,7 +237,9 @@ async def run_simple_mode(pet: Pet, config: dict):
                 continue
 
             if user_input.startswith("/"):
-                cmd = user_input.lower()
+                parts = user_input.split(maxsplit=2)
+                cmd = parts[0].lower()
+                arg = parts[1] if len(parts) > 1 else None
 
                 if cmd in ("/quit", "/exit"):
                     console.print(f"\n[yellow]{pet.name}: Bye~[/]")
@@ -197,6 +249,78 @@ async def run_simple_mode(pet: Pet, config: dict):
                     show_help()
                     continue
 
+                elif cmd == "/status":
+                    status = pet.get_status()
+                    info = pet.personality.get_current_info()
+                    console.print(Panel(
+                        f"Name: {status['name']}\n"
+                        f"Species: {status['species']}\n"
+                        f"Mood: {status['mood']} ({status['mood_value']:.0%})\n"
+                        f"Personality: {info['name']}",
+                        title="Status",
+                        border_style="green"
+                    ))
+                    continue
+
+                elif cmd == "/mood":
+                    console.print(f"[cyan]Mood: {pet.memory.mood:.2%}[/]")
+                    continue
+
+                elif cmd == "/personality":
+                    if arg:
+                        if pet.personality.set_preset(arg):
+                            console.print(f"[green]Switched to: {arg}[/]")
+                        else:
+                            console.print(f"[red]Unknown: {arg}[/]")
+                            show_personalities(pet)
+                    else:
+                        show_personalities(pet)
+                    continue
+
+                elif cmd == "/art":
+                    if arg:
+                        if pet.set_ascii_art(arg):
+                            console.print(f"[green]Appearance: {arg}[/]")
+                            console.print(pet.get_ascii_art())
+                        else:
+                            console.print(f"[red]Unknown: {arg}[/]")
+                            show_arts(pet)
+                    else:
+                        show_arts(pet)
+                    continue
+
+                elif cmd == "/load" and arg:
+                    if pet.personality.load_from_file(arg):
+                        console.print(f"[green]Loaded: {Path(arg).name}[/]")
+                    else:
+                        console.print(f"[red]Cannot load: {arg}[/]")
+                    continue
+
+                elif cmd == "/import" and arg:
+                    if pet.load_art_from_file(arg):
+                        console.print(f"[green]Art imported from: {arg}[/]")
+                        console.print(pet.get_ascii_art())
+                    else:
+                        console.print(f"[red]Cannot load: {arg}[/]")
+                        console.print("[dim]Create a .txt file with your ASCII art[/]")
+                    continue
+
+                elif cmd == "/pet":
+                    console.print(f"[magenta]{pet.name}:[/] {pet.pet_head()}")
+                    continue
+
+                elif cmd == "/feed":
+                    console.print(f"[magenta]{pet.name}:[/] {pet.feed()}")
+                    continue
+
+                elif cmd == "/play":
+                    console.print(f"[magenta]{pet.name}:[/] {pet.play()}")
+                    continue
+
+                elif cmd == "/scold":
+                    console.print(f"[magenta]{pet.name}:[/] {pet.scold()}")
+                    continue
+
                 elif cmd == "/config":
                     new_config = run_setup_wizard()
                     config.update(new_config)
@@ -204,24 +328,9 @@ async def run_simple_mode(pet: Pet, config: dict):
                     show_welcome(pet)
                     continue
 
-                elif cmd == "/status":
-                    status = pet.get_status()
-                    console.print(Panel(
-                        f"Name: {status['name']}\n"
-                        f"Species: {status['species']}\n"
-                        f"Mood: {status['mood']} ({status['mood_value']:.0%})",
-                        title="Status",
-                        border_style="green"
-                    ))
-                    continue
-
                 elif cmd == "/reload":
                     pet.personality.reload()
                     console.print("[green]Personality reloaded![/]")
-                    continue
-
-                elif cmd == "/mood":
-                    console.print(f"[cyan]Mood: {pet.memory.mood:.2%}[/]")
                     continue
 
                 elif cmd == "/clear":

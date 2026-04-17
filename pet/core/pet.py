@@ -2,6 +2,7 @@
 
 import random
 from typing import Optional, List, Dict
+from pathlib import Path
 from .personality import PersonalityEngine
 from .memory import Memory
 
@@ -9,17 +10,142 @@ from .memory import Memory
 class Pet:
     """电子宠物"""
 
+    # 预设 ASCII 艺术
+    ASCII_ARTS = {
+        "cat": {
+            "name": "小猫",
+            "happy": """
+   /\__/\
+  ( o.o )
+   > ^ <
+  /|   |\
+  (_|   |_)""",
+            "normal": """
+   /\__/\
+  ( -.- )
+   > ^ <
+  /|   |\
+  (_|   |_)""",
+            "sad": """
+   /\__/\
+  ( T_T )
+   >   <
+  /|   |\
+  (_|   |_)"""
+        },
+        "dog": {
+            "name": "小狗",
+            "happy": """
+  / \__
+ (    @\___
+ /         O
+/   (_____/
+/_____/   U""",
+            "normal": """
+  / \__
+ (    -\___
+ /         O
+/   (_____/
+/_____/   U""",
+            "sad": """
+  / \__
+ (    T\___
+ /         O
+/   (_____/
+/_____/   U"""
+        },
+        "rabbit": {
+            "name": "小兔",
+            "happy": """
+   / /\ \
+  ( o.o )
+   > ^ <
+  /|   |\
+  (_|   |_)""",
+            "normal": """
+   / /\ \
+  ( -.- )
+   >   <
+  /|   |\
+  (_|   |_)""",
+            "sad": """
+   / /\ \
+  ( T_T )
+   >   <
+  /|   |\
+  (_|   |_)"""
+        },
+        "ghost": {
+            "name": "幽灵",
+            "happy": """
+   .---.
+  /     \
+ | o o  |
+ |  ^   |
+  \ ___/
+   |   |""",
+            "normal": """
+   .---.
+  /     \
+ | - -  |
+ |      |
+  \ ___/
+   |   |""",
+            "sad": """
+   .---.
+  /     \
+ | T T  |
+ |      |
+  \ ___/
+   |   |"""
+        }
+    }
+
     def __init__(self, name: str = "小宠", species: str = "电子精灵"):
         self.name = name
         self.species = species
         self.personality = PersonalityEngine()
         self.memory = Memory()
-        self.llm = None  # 延迟加载
+        self.llm = None
         self._last_autonomous_msg = ""
+        # 自定义外观
+        self.custom_art: Optional[str] = None
+        self.current_art_id: str = "cat"
 
     def set_llm(self, llm_client):
         """设置LLM客户端"""
         self.llm = llm_client
+
+    def set_ascii_art(self, art_id: str) -> bool:
+        """设置预设外观"""
+        if art_id in self.ASCII_ARTS:
+            self.current_art_id = art_id
+            self.custom_art = None
+            return True
+        return False
+
+    def set_custom_art(self, art_text: str):
+        """设置自定义外观"""
+        self.custom_art = art_text
+
+    def load_art_from_file(self, file_path: str) -> bool:
+        """从文件加载外观"""
+        path = Path(file_path)
+        if path.exists() and path.suffix == ".txt":
+            self.custom_art = path.read_text(encoding="utf-8")
+            return True
+        return False
+
+    def list_arts(self) -> List[Dict[str, str]]:
+        """列出所有预设外观"""
+        result = []
+        for key, val in self.ASCII_ARTS.items():
+            result.append({
+                "id": key,
+                "name": val["name"],
+                "current": self.current_art_id == key and not self.custom_art
+            })
+        return result
 
     async def respond(self, user_input: str) -> str:
         """生成回复"""
@@ -98,8 +224,7 @@ class Pet:
         """生成自主发言"""
         mood = self.memory.mood
 
-        # 根据心情和闲置时间生成不同类型的发言
-        if idle_time > 300:  # 闲置超过5分钟
+        if idle_time > 300:
             messages = [
                 "主人好久没理我了...",
                 "主人还在吗？想你了~",
@@ -133,7 +258,6 @@ class Pet:
 
         base_msg = random.choice(messages)
 
-        # 如果有LLM，让它润色一下
         if self.llm:
             try:
                 response = await self.llm.chat(
@@ -161,28 +285,19 @@ class Pet:
 
     def get_ascii_art(self) -> str:
         """获取ASCII艺术形象"""
+        # 优先使用自定义外观
+        if self.custom_art:
+            return self.custom_art
+
+        # 根据心情选择表情
         mood = self.memory.mood
         if mood > 0.7:
-            return """
-   / \\__
-  (    @\\___
-  /         O
- /   (_____/
-/_____/   U
-"""
+            mood_key = "happy"
         elif mood > 0.4:
-            return """
-   / \\__
-  (    -\\___
-  /         O
- /   (_____/
-/_____/   U
-"""
+            mood_key = "normal"
         else:
-            return """
-   / \\__
-  (    T\\___
-  /         O
- /   (_____/
-/_____/   U
-"""
+            mood_key = "sad"
+
+        # 获取预设外观
+        art = self.ASCII_ARTS.get(self.current_art_id, self.ASCII_ARTS["cat"])
+        return art.get(mood_key, art["normal"])
