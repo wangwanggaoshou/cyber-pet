@@ -1,0 +1,16 @@
+# 宠物基础配置
+pet:
+  name: "小宠"
+  species: "电子精灵"
+
+# LLM配置
+llm:
+  provider: "openai"  # openai / custom
+  model: "gpt-4o-mini"
+  api_key: ""  # 从环境变量 OPENAI_API_KEY 读取
+  base_url: ""  # 可选，自定义API地址
+
+# 记忆配置
+memory:
+  max_history: 50  # 最大对话记录数
+  save_file: "config/memory.json"  # 记忆保存文件
