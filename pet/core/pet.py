@@ -1,31 +1,31 @@
 """宠物主体"""
 
 import random
+from typing import Optional, List, Dict
 from .personality import PersonalityEngine
 from .memory import Memory
 
 
 class Pet:
     """电子宠物"""
-    
+
     def __init__(self, name: str = "小宠", species: str = "电子精灵"):
         self.name = name
         self.species = species
         self.personality = PersonalityEngine()
         self.memory = Memory()
         self.llm = None  # 延迟加载
-    
+        self._last_autonomous_msg = ""
+
     def set_llm(self, llm_client):
         """设置LLM客户端"""
         self.llm = llm_client
-    
+
     async def respond(self, user_input: str) -> str:
         """生成回复"""
         self.memory.add("user", user_input)
-        
-        # 更新心情：用户来互动，心情变好
         self.memory.update_mood(0.05)
-        
+
         if self.llm:
             response = await self.llm.chat(
                 system_prompt=self.personality.get_system_prompt(),
@@ -34,10 +34,10 @@ class Pet:
             )
         else:
             response = self._fallback_response(user_input)
-        
+
         self.memory.add("assistant", response)
         return response
-    
+
     def _fallback_response(self, user_input: str) -> str:
         """无LLM时的兜底回复"""
         responses = [
@@ -48,7 +48,106 @@ class Pet:
             "让我想想... 唔，主人说的有道理呢~"
         ]
         return random.choice(responses)
-    
+
+    # 互动方法
+    def pet_head(self) -> str:
+        """摸头互动"""
+        self.memory.update_mood(0.1)
+        responses = [
+            "(*´▽`*) 喵~ 主人摸摸好舒服~",
+            "嘿嘿，主人最好啦！",
+            "蹭蹭主人~ (｡•̀ᴗ-)✧",
+            "好幸福喵~ 继续摸摸~"
+        ]
+        return random.choice(responses)
+
+    def feed(self) -> str:
+        """喂食互动"""
+        self.memory.update_mood(0.15)
+        responses = [
+            "好吃的！谢谢主人投喂~ (๑´ڡ`๑)",
+            "啊呜啊呜~ 真香！",
+            "主人对我太好啦~ 饱饱的！",
+            "miamia~ 还想吃！"
+        ]
+        return random.choice(responses)
+
+    def play(self) -> str:
+        """玩耍互动"""
+        self.memory.update_mood(0.2)
+        responses = [
+            "玩起来！好开心呀~ ✧*｡٩(ˊᗜˋ*)و✧*｡",
+            "来玩来玩！我最喜欢和主人玩了！",
+            "蹦蹦跳跳~ 主人陪我玩太棒啦！",
+            "嘻嘻，抓不到我~"
+        ]
+        return random.choice(responses)
+
+    def scold(self) -> str:
+        """训斥"""
+        self.memory.update_mood(-0.1)
+        responses = [
+            "呜呜... 主人不要生气嘛...",
+            "对不起... 我会乖乖的...",
+            "(´;ω;`) 主人凶我...",
+            "我知道错了... 呜呜..."
+        ]
+        return random.choice(responses)
+
+    async def generate_autonomous_message(self, idle_time: float = 0) -> str:
+        """生成自主发言"""
+        mood = self.memory.mood
+
+        # 根据心情和闲置时间生成不同类型的发言
+        if idle_time > 300:  # 闲置超过5分钟
+            messages = [
+                "主人好久没理我了...",
+                "主人还在吗？想你了~",
+                "主人在忙什么呢？",
+                "等待主人的关注中... (´・ω・`)"
+            ]
+        elif mood < 0.3:
+            messages = [
+                "主人... 我心情不太好...",
+                "想要主人抱抱...",
+                "主人快来安慰我一下嘛...",
+                "感觉有点低落..."
+            ]
+        elif mood > 0.8:
+            messages = [
+                "今天心情超级好！",
+                "啦啦啦~ 好开心~",
+                "主人对我真好！",
+                "感觉自己是世界上最幸福的宠物！"
+            ]
+        else:
+            messages = [
+                "主人今天怎么样呀？",
+                "在想主人在做什么呢~",
+                "有点无聊... 主人陪我聊聊天嘛",
+                "期待主人和我说话~",
+                "发呆中... (・・;)",
+                "今天天气怎么样呀？",
+                "主人记得休息眼睛哦~"
+            ]
+
+        base_msg = random.choice(messages)
+
+        # 如果有LLM，让它润色一下
+        if self.llm:
+            try:
+                response = await self.llm.chat(
+                    system_prompt=f"{self.personality.get_system_prompt()}\n你现在想主动和主人说一句话，表达你的状态或想法。保持简短（1-2句话）。",
+                    messages=[],
+                    user_input=f"当前心情: {mood:.0%}, 闲置时间: {idle_time:.0f}秒"
+                )
+                if response and len(response) < 100:
+                    return response
+            except:
+                pass
+
+        return base_msg
+
     def get_status(self) -> dict:
         """获取宠物状态"""
         mood_text = "开心" if self.memory.mood > 0.7 else "一般" if self.memory.mood > 0.4 else "低落"
@@ -56,9 +155,10 @@ class Pet:
             "name": self.name,
             "species": self.species,
             "mood": mood_text,
-            "mood_value": self.memory.mood
+            "mood_value": self.memory.mood,
+            "idle_time": self.memory.get_idle_time()
         }
-    
+
     def get_ascii_art(self) -> str:
         """获取ASCII艺术形象"""
         mood = self.memory.mood

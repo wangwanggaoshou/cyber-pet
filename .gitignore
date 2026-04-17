@@ -18,4 +18,4 @@ config/settings.local.yaml
 config/memory.json
 
 # Logs
-*.log
+*.logconfig/settings.yaml
